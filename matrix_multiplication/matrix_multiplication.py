@@ -1,5 +1,6 @@
 import multiprocessing
 from tqdm import tqdm  # Biblioteca para estimar tempo de iterações de um loop.
+import numpy as np
 
 
 def load_matrix(filename: str) -> list[list[float]]:
@@ -26,22 +27,33 @@ def multiply_row_by_matrix(row: list[float], matB: list[list[float]]) -> list[fl
     return result_row
 
 
+def numpy_multiply_row_by_matrix(row: np.ndarray, matB: np.ndarray) -> np.ndarray:
+    return np.dot(row, matB)
+
+
 def matrix_multiply_worker(
     matA: list[list[float]],
     matB: list[list[float]],
     rows_range: tuple[int, int],
     output: list[list[float]],
     index: int,
+    use_numpy: bool,
 ):
     partial_result = []
     for i in tqdm(range(*rows_range), desc=f"Processador {index}"):
-        partial_result.append(multiply_row_by_matrix(matA[i], matB))
+        row = matA[i]
+        if use_numpy:
+            partial_result.append(
+                numpy_multiply_row_by_matrix(np.array(row), np.array(matB))
+            )
+        else:
+            partial_result.append(multiply_row_by_matrix(row, matB))
 
     output[index] = partial_result
 
 
 def parallel_matrix_multiply(
-    matA: list[list[float]], matB: list[list[float]], num_workers: int
+    matA: list[list[float]], matB: list[list[float]], num_workers: int, use_numpy: bool
 ):
     print("Multiplicando matrizes.")
     manager = multiprocessing.Manager()
@@ -54,13 +66,12 @@ def parallel_matrix_multiply(
         start_row = i * rows_per_worker
         if i == num_workers - 1:
             end_row = len(matA)
-
         else:
             end_row = (i + 1) * rows_per_worker
 
         process = multiprocessing.Process(
             target=matrix_multiply_worker,
-            args=(matA, matB, (start_row, end_row), output, i),
+            args=(matA, matB, (start_row, end_row), output, i, use_numpy),
         )
         processes.append(process)
         process.start()
@@ -89,11 +100,12 @@ if __name__ == "__main__":
             "As matrizes não podem ser multiplicadas. O número de colunas de A deve ser igual ao número de linhas de B."
         )
 
-    # num_workers = multiprocessing.cpu_count()  # Aumente por sua conta e risco.
-    num_workers: int = 4
+    num_workers = multiprocessing.cpu_count()  # Aumente por sua conta e risco.
+    use_numpy: bool = True
+
     print(f"Multiplicando matrizes usando {num_workers} processadores lógicos.")
 
-    result = parallel_matrix_multiply(matA, matB, num_workers)
+    result = parallel_matrix_multiply(matA, matB, num_workers, use_numpy)
 
     print("Resultado da multiplicação de matrizes:")
     print_matrix(result)
